@@ -8,6 +8,7 @@ from stat import *
 from collections import defaultdict
 from cbr_box import CBR_BOX
 from cbr_quickbase import CBR_QB
+from cbr_sftp import CBR_SFTP
 
 class DronePhotoOrganizer:
 
@@ -112,7 +113,28 @@ class DronePhotoOrganizer:
             self._update_drone_folder_button(site_id, folder_id)
         return
 
+    def _update_panorama_button(self, site_id):
+        #Field IDs for Site ID and Drone Folder
+        field_ids = [6, 30]
+        #Panorama Base URL
+        base_url = 'http://128.199.10.227/pannellum.htm'
+        #URL where photo is located
+        photo_url = f'http://128.199.10.227/Panoramas/{site_id}.JPG'
+        #Pannellum config
+        pannellum_config = f'#panorama={photo_url}&title={site_id}&autoLoad=true'
+        #Full URL
+        full_url = base_url + pannellum_config
+        #Dataframe for upload
+        df = pd.DataFrame([[site_id, full_url]], columns=field_ids)
+        #Sites table id
+        tableid = 'bq8fc85sy'
+        #Update frone folders
+        self.qb_client.update_records_with_dataframe(df, tableid)
+        return
+
     def upload_panoramas(self):
+        #Plaintext login info, change later, not secure
+        sftp = CBR_SFTP('128.199.10.227', username='root', password='testpassword', directory='/var/www/gavingrey.dev/public_html/Panoramas')
         panoramas = [pano_id for pano_id in self.site_id_mapping if 'PANO' in pano_id]
         if not panoramas:
             print('No Panoramas to Process!')
@@ -120,7 +142,8 @@ class DronePhotoOrganizer:
         for pano_id in panoramas:
             photos_list = self.site_id_mapping[pano_id]
             site_id = pano_id.replace('_PANO', '')
-            
+            sftp.upload_panorama_list(photos_list, site_id)
+            self._update_panorama_button(site_id)
         return
 
     def __init__(self, folderpath, recursive=False, logging=False):
@@ -136,7 +159,9 @@ class DronePhotoOrganizer:
 
 
 if __name__ == '__main__':
-    classify = DronePhotoOrganizer('/Volumes/Untitled/DCIM/', recursive=True, logging=True)
+    classify = DronePhotoOrganizer('/Users/gavingrey/Desktop/SCIP Photos/', recursive=True, logging=True)
+    classify.upload_regular_photos()
+    classify.upload_panoramas()
     classify.upload_regular_photos()
     #classify.upload_regular_photos(logging=True)
     #classify_photos('/Volumes/Untitled/DCIM/', True)
